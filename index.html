@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Il Cercatore · Posizione live</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  html, body { margin: 0; height: 100%; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: #2F4A35; color: #F4EEE2; }
+  body { display: flex; flex-direction: column; }
+  header { padding: 12px 16px; display: flex; flex-direction: column; gap: 4px; }
+  h1 { margin: 0; font-size: 20px; }
+  #info { font-size: 15px; color: #DCE6D8; }
+  #map { flex: 1; min-height: 300px; }
+  footer { padding: 10px 16px; display: flex; gap: 10px; flex-wrap: wrap; }
+  a.btn { flex: 1; text-align: center; padding: 12px; border-radius: 10px; background: #C8913A; color: #1F2A22; font-weight: 700; text-decoration: none; min-width: 140px; }
+  a.btn.red { background: #C62828; color: white; }
+  .off { color: #FFE082; font-weight: 700; }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="title">📡 Posizione live</h1>
+  <div id="info">Carico la posizione…</div>
+</header>
+<div id="map"></div>
+<footer>
+  <a class="btn" id="gmaps" href="#" target="_blank" rel="noopener">🧭 Apri in Google Maps</a>
+  <a class="btn red" href="tel:112">🚨 Chiama il 112</a>
+</footer>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+  // Pagina della posizione live de Il Cercatore. Il codice segreto è dopo il # nel link
+  // (non arriva mai a questo sito). La chiave qui sotto è quella pubblica dell'app.
+  const URL = 'https://obixpbhdqhnjkyplttmf.supabase.co';
+  const KEY = 'sb_publishable_UdbA9AvkFjWJIaLF0Hcn5A_9VpwFhAY';
+  const token = location.hash.slice(1);
+  const en = !/^it/i.test(navigator.language || 'it');
+  const T = (it, eng) => (en ? eng : it);
+  const info = document.getElementById('info');
+  const gmaps = document.getElementById('gmaps');
+  gmaps.textContent = T('🧭 Apri in Google Maps', '🧭 Open in Google Maps');
+  document.querySelector('a.red').textContent = T('🚨 Chiama il 112', '🚨 Call 112');
+
+  const map = L.map('map').setView([44.7, 8.0], 8);
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
+  let marker = null, circle = null, first = true;
+
+  const ago = (d) => {
+    const m = Math.round((Date.now() - new Date(d)) / 60000);
+    if (m < 1) return T('adesso', 'just now');
+    if (m < 60) return T(`${m} min fa`, `${m} min ago`);
+    return new Date(d).toLocaleString(en ? 'en-GB' : 'it-IT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  };
+
+  async function load() {
+    if (token.length < 20) { info.innerHTML = `<span class="off">${T('Link non valido.', 'Invalid link.')}</span>`; return; }
+    try {
+      const r = await fetch(`${URL}/rest/v1/rpc/live_get`, {
+        method: 'POST',
+        headers: { apikey: KEY, Authorization: `Bearer ${KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ p_token: token }),
+      });
+      const rows = await r.json();
+      const s = Array.isArray(rows) ? rows[0] : null;
+      if (!s) { info.innerHTML = `<span class="off">${T('Link non valido o scaduto.', 'Link not valid or expired.')}</span>`; return; }
+      document.getElementById('title').textContent = `📡 ${s.nickname}`;
+      if (!s.active) { info.innerHTML = `<span class="off">${T('Condivisione terminata.', 'Sharing has ended.')}</span>`; return; }
+      if (s.latitude == null) { info.textContent = T('In attesa della prima posizione…', 'Waiting for the first location…'); return; }
+      const p = [s.latitude, s.longitude];
+      if (!marker) { marker = L.marker(p).addTo(map); circle = L.circle(p, { radius: s.accuracy_m || 20, color: '#C62828' }).addTo(map); }
+      marker.setLatLng(p); circle.setLatLng(p); circle.setRadius(s.accuracy_m || 20);
+      if (first) { map.setView(p, 16); first = false; }
+      gmaps.href = `https://www.google.com/maps/search/?api=1&query=${s.latitude},${s.longitude}`;
+      const until = new Date(s.expires_at).toLocaleTimeString(en ? 'en-GB' : 'it-IT', { hour: '2-digit', minute: '2-digit' });
+      info.textContent = `${T('Ultimo aggiornamento', 'Last update')}: ${ago(s.updated_at)}` +
+        (s.accuracy_m ? ` · ±${Math.round(s.accuracy_m)} m` : '') + ` · ${T('attiva fino alle', 'on until')} ${until}`;
+    } catch (e) {
+      info.textContent = T('Nessuna connessione, riprovo…', 'No connection, retrying…');
+    }
+  }
+  load();
+  setInterval(load, 20000);
+</script>
+</body>
+</html>
