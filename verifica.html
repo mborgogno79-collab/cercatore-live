@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Il Cercatore · Verifica certificato</title>
+<style>
+  body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: #F4EEE2; color: #1F2A22; }
+  header { background: #2F4A35; color: #F4EEE2; padding: 18px 16px; }
+  header h1 { margin: 0; font-size: 21px; }
+  main { max-width: 640px; margin: 0 auto; padding: 16px 16px 40px; }
+  .status { padding: 14px 16px; border-radius: 12px; font-weight: 800; font-size: 18px; margin-bottom: 14px; }
+  .ok { background: #DCEFD9; color: #1E5C2A; }
+  .bad { background: #F8D7D5; color: #9B1C1C; }
+  .wait { background: #EFE7D4; color: #5f665e; }
+  .code { font-size: 26px; font-weight: 800; letter-spacing: 2px; text-align: center; margin: 6px 0 14px; color: #2F4A35; }
+  table { width: 100%; border-collapse: collapse; background: white; border-radius: 12px; overflow: hidden; }
+  td { padding: 10px 12px; border-bottom: 1px solid #EEE7D8; vertical-align: top; font-size: 15px; }
+  td:first-child { color: #5f665e; width: 42%; }
+  td:last-child { font-weight: 600; }
+  img { width: 100%; border-radius: 12px; margin-top: 14px; background: #ddd; }
+  form { display: flex; gap: 8px; margin-top: 10px; }
+  input { flex: 1; font-size: 18px; padding: 10px; border-radius: 10px; border: 1px solid #bbb; text-transform: uppercase; }
+  button { font-size: 16px; padding: 10px 16px; border-radius: 10px; border: 0; background: #C8913A; color: #1F2A22; font-weight: 700; }
+  .muted { color: #5f665e; font-size: 13px; margin-top: 14px; }
+</style>
+</head>
+<body>
+<header><h1 id="title">✅ Il Cercatore · Verifica certificato</h1></header>
+<main>
+  <div id="out"></div>
+  <form id="f">
+    <input id="c" placeholder="K7QF-2M9X" autocomplete="off" aria-label="Codice">
+    <button id="b">Verifica</button>
+  </form>
+  <p class="muted" id="note">Il certificato è registrato sul server al momento della raccolta, con posizione GPS, ora GPS e foto scattata sul posto. Per privacy si mostra solo il comune, mai il punto esatto.</p>
+</main>
+<script>
+  // Pagina pubblica di verifica: il codice arriva dal QR del certificato (dopo il #).
+  // La chiave qui sotto è quella pubblica dell'app; la funzione mostra solo i dati pubblici.
+  const URL = 'https://obixpbhdqhnjkyplttmf.supabase.co';
+  const KEY = 'sb_publishable_UdbA9AvkFjWJIaLF0Hcn5A_9VpwFhAY';
+  const en = !/^it/i.test(navigator.language || 'it');
+  const T = (it, eng) => (en ? eng : it);
+  const KINDS = {
+    bianco: T('Tartufo bianco', 'White truffle'), nero: T('Tartufo nero pregiato', 'Black winter truffle'),
+    scorzone: T('Scorzone (estivo)', 'Summer truffle'), uncinato: T('Nero uncinato', 'Burgundy truffle'),
+    bianchetto: T('Bianchetto', 'Bianchetto truffle'), porcino: T('Porcino', 'Porcini'), finferlo: T('Finferlo', 'Chanterelle'),
+    ovolo: T('Ovolo', "Caesar's mushroom"), altro: T('Altro', 'Other'),
+  };
+  const fmt = (d) => d ? new Date(d).toLocaleString(en ? 'en-GB' : 'it-IT', { dateStyle: 'short', timeStyle: 'short' }) : '';
+  const g = (n) => n == null ? T('da pesare', 'to be weighed') : (n >= 1000 ? (n / 1000).toLocaleString('it-IT') + ' kg' : n.toLocaleString('it-IT') + ' g');
+  const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+  const out = document.getElementById('out');
+
+  function parse(text) {
+    const m = String(text).toUpperCase().replace(/\s/g, '').match(/([A-Z0-9]{4})-?([A-Z0-9]{4})$/);
+    return m ? m[1] + '-' + m[2] : null;
+  }
+
+  async function check(code) {
+    out.innerHTML = '<div class="status wait">' + T('Controllo…', 'Checking…') + '</div>';
+    try {
+      const r = await fetch(URL + '/rest/v1/rpc/verify_certificate', {
+        method: 'POST',
+        headers: { apikey: KEY, Authorization: 'Bearer ' + KEY, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ p_code: code }),
+      });
+      const c = (await r.json())[0];
+      if (!c) { out.innerHTML = '<div class="status bad">❌ ' + T('Codice non trovato: questo certificato non esiste.', 'Code not found: this certificate does not exist.') + '</div>'; return; }
+      let w = g(c.weight_grams);
+      if (c.weight_fixed_at) w += ' (' + T('corretto il ', 'corrected on ') + fmt(c.weight_fixed_at) + ', ' + T('prima ', 'was ') + g(c.weight_before) + ')';
+      else if (c.weighed_at) w += ' (' + T('pesato dopo, il ', 'weighed later, on ') + fmt(c.weighed_at) + ')';
+      const rows = [
+        [T('Prodotto', 'Product'), KINDS[c.kind] || c.kind],
+        [T('Peso dichiarato', 'Declared weight'), w],
+        [T('Raccolto il (ora GPS)', 'Harvested on (GPS time)'), fmt(c.gps_time)],
+        [T('Zona', 'Area'), [c.comune, c.provincia].filter(Boolean).join(' (') + (c.comune && c.provincia ? ')' : '') || T('non indicata', 'not given')],
+        [T('Raccoglitore', 'Harvester'), c.nickname],
+        [T('Tesserino', 'Permit'), c.permit || T('non indicato', 'not given')],
+        ...(c.dog_name ? [[T('Cane', 'Dog'), c.dog_name]] : []),
+        [T('Registrato sul server', 'Registered on server'), fmt(c.received_at)],
+      ];
+      out.innerHTML =
+        (c.seal_ok
+          ? '<div class="status ok">✅ ' + T('Certificato valido', 'Valid certificate') + '</div>'
+          : '<div class="status bad">⚠️ ' + T('Dati alterati: questo certificato NON è valido', 'Data altered: this certificate is NOT valid') + '</div>') +
+        '<div class="code">' + esc(c.code) + '</div>' +
+        '<table>' + rows.map((x) => '<tr><td>' + esc(x[0]) + '</td><td>' + esc(x[1]) + '</td></tr>').join('') + '</table>' +
+        '<img alt="' + T('Foto del raccolto', 'Photo of the harvest') + '" src="' + URL + '/storage/v1/object/public/certificati/' + encodeURI(c.photo_path) + '">';
+    } catch (e) {
+      out.innerHTML = '<div class="status bad">' + T('Serve internet per verificare. Riprova.', 'Internet is needed to check. Try again.') + '</div>';
+    }
+  }
+
+  document.getElementById('f').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const code = parse(document.getElementById('c').value);
+    if (code) { location.hash = code; check(code); }
+  });
+  if (en) {
+    document.getElementById('title').textContent = '✅ Il Cercatore · Certificate check';
+    document.getElementById('b').textContent = 'Check';
+    document.getElementById('note').textContent = 'The certificate is registered on the server at harvest time, with GPS position, GPS time and a photo taken on the spot. For privacy only the town is shown, never the exact spot.';
+  }
+  const first = parse(decodeURIComponent(location.hash.slice(1)));
+  if (first) { document.getElementById('c').value = first; check(first); }
+</script>
+</body>
+</html>
