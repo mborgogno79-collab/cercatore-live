@@ -83,7 +83,12 @@
         [T('Registrato sul server', 'Registered on server'), fmt(c.received_at)],
       ];
       out.innerHTML =
-        (c.seal_ok
+        (!c.seal_ok
+          ? '<div class="status bad">⚠️ ' + T('Dati alterati: questo certificato NON è valido', 'Data altered: this certificate is NOT valid') + '</div>'
+          : c.cancelled_at
+          ? '<div class="status bad">❌ ' + T('Certificato ANNULLATO dal raccoglitore il ', 'Certificate CANCELLED by the harvester on ') + fmt(c.cancelled_at) +
+            (c.cancel_reason ? '<br>' + T('Motivo: ', 'Reason: ') + esc(c.cancel_reason) : '') + '</div>'
+          : c.seal_ok
           ? '<div class="status ok">✅ ' + T('Certificato valido', 'Valid certificate') + '</div>'
           : '<div class="status bad">⚠️ ' + T('Dati alterati: questo certificato NON è valido', 'Data altered: this certificate is NOT valid') + '</div>') +
         '<div class="code">' + esc(c.code) + '</div>' +
