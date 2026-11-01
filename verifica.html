@@ -34,7 +34,7 @@
     <input id="c" placeholder="K7QF-2M9X" autocomplete="off" aria-label="Codice">
     <button id="b">Verifica</button>
   </form>
-  <p class="muted" id="note">Il certificato è registrato sul server al momento della raccolta, con posizione GPS, ora GPS e foto scattata sul posto. Per privacy si mostra solo il comune, mai il punto esatto.</p>
+  <p class="muted" id="note">Il certificato è registrato sul server al momento della raccolta. Posizione e ora vengono dal GPS del telefono; il comune lo calcola il server dalla posizione; la foto è conservata sul server e non può servire per due certificati. Peso e tesserino sono dichiarati dal raccoglitore. Per privacy si mostra solo il comune, mai il punto esatto.</p>
 </main>
 <script>
   // Pagina pubblica di verifica: il codice arriva dal QR del certificato (dopo il #).
@@ -76,9 +76,10 @@
         [T('Prodotto', 'Product'), KINDS[c.kind] || c.kind],
         [T('Peso dichiarato', 'Declared weight'), w],
         [T('Raccolto il (ora GPS)', 'Harvested on (GPS time)'), fmt(c.gps_time)],
-        [T('Zona', 'Area'), [c.comune, c.provincia].filter(Boolean).join(' (') + (c.comune && c.provincia ? ')' : '') || T('non indicata', 'not given')],
+        [T('Zona', 'Area'), ([c.comune, c.provincia].filter(Boolean).join(' (') + (c.comune && c.provincia ? ')' : '') || T('non indicata', 'not given')) +
+          (c.comune ? (c.place_source === 'server' ? T(' · calcolata dal server dalla posizione GPS', ' · computed by the server from the GPS position') : T(' (dichiarata)', ' (declared)')) : '')],
         [T('Raccoglitore', 'Harvester'), c.nickname],
-        [T('Tesserino', 'Permit'), c.permit || T('non indicato', 'not given')],
+        [T('Tesserino (dichiarato)', 'Permit (declared)'), c.permit || T('non indicato', 'not given')],
         ...(c.dog_name ? [[T('Cane', 'Dog'), c.dog_name]] : []),
         [T('Registrato sul server', 'Registered on server'), fmt(c.received_at)],
       ];
@@ -93,7 +94,9 @@
           : '<div class="status bad">⚠️ ' + T('Dati alterati: questo certificato NON è valido', 'Data altered: this certificate is NOT valid') + '</div>') +
         '<div class="code">' + esc(c.code) + '</div>' +
         '<table>' + rows.map((x) => '<tr><td>' + esc(x[0]) + '</td><td>' + esc(x[1]) + '</td></tr>').join('') + '</table>' +
-        '<img alt="' + T('Foto del raccolto', 'Photo of the harvest') + '" src="' + URL + '/storage/v1/object/public/certificati/' + encodeURI(c.photo_path) + '">';
+        (c.photo_path
+          ? '<img alt="' + T('Foto del raccolto', 'Photo of the harvest') + '" src="' + URL + '/storage/v1/object/public/certificati/' + encodeURI(c.photo_path) + '">'
+          : '<p class="muted">' + T('Foto non più pubblicata (certificato reso anonimo).', 'Photo no longer published (certificate anonymized).') + '</p>');
     } catch (e) {
       out.innerHTML = '<div class="status bad">' + T('Serve internet per verificare. Riprova.', 'Internet is needed to check. Try again.') + '</div>';
     }
@@ -107,7 +110,7 @@
   if (en) {
     document.getElementById('title').textContent = '✅ Il Cercatore · Certificate check';
     document.getElementById('b').textContent = 'Check';
-    document.getElementById('note').textContent = 'The certificate is registered on the server at harvest time, with GPS position, GPS time and a photo taken on the spot. For privacy only the town is shown, never the exact spot.';
+    document.getElementById('note').textContent = 'The certificate is registered on the server at harvest time. Position and time come from the phone GPS; the town is computed by the server from the position; the photo is kept on the server and cannot be used for two certificates. Weight and permit are declared by the harvester. For privacy only the town is shown, never the exact spot.';
   }
   const first = parse(decodeURIComponent(location.hash.slice(1)));
   if (first) { document.getElementById('c').value = first; check(first); }
