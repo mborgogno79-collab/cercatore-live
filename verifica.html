@@ -34,13 +34,17 @@
     <input id="c" placeholder="K7QF-2M9X" autocomplete="off" aria-label="Codice">
     <button id="b">Verifica</button>
   </form>
-  <p class="muted" id="note">Il certificato è registrato sul server al momento della raccolta. Posizione e ora vengono dal GPS del telefono; il comune lo calcola il server dalla posizione; la foto è conservata sul server e non può servire per due certificati. Peso e tesserino sono dichiarati dal raccoglitore. Per privacy si mostra solo il comune, mai il punto esatto.</p>
+  <p class="muted" id="note">Il certificato è registrato sul server al momento della raccolta. Posizione e ora vengono dal GPS del telefono; il comune lo calcola il server dalla posizione; la foto è conservata sul server e non può servire per due certificati. Dal 3/11/2026 il server controlla anche che il telefono sia originale (Google Play Integrity) e firma ogni certificato con una chiave segreta: la firma si controlla qui con la chiave pubblica. Peso e tesserino sono dichiarati dal raccoglitore. Per privacy si mostra solo il comune, mai il punto esatto.</p>
 </main>
 <script>
   // Pagina pubblica di verifica: il codice arriva dal QR del certificato (dopo il #).
   // La chiave qui sotto è quella pubblica dell'app; la funzione mostra solo i dati pubblici.
   const URL = 'https://obixpbhdqhnjkyplttmf.supabase.co';
   const KEY = 'sb_publishable_UdbA9AvkFjWJIaLF0Hcn5A_9VpwFhAY';
+  // Chiavi PUBBLICHE della firma dei certificati (Ed25519, 32 byte in base64). La segreta sta solo sul server.
+  // Chiunque può usarle per controllare che un certificato l'abbia firmato davvero il server di Il Cercatore.
+  // Se un giorno la chiave cambia, quella nuova si aggiunge in fondo e le vecchie restano (per i certificati già firmati).
+  const SEAL_PUBLIC_KEYS = [];
   const en = !/^it/i.test(navigator.language || 'it');
   const T = (it, eng) => (en ? eng : it);
   const KINDS = {
@@ -53,6 +57,52 @@
   const g = (n) => n == null ? T('da pesare', 'to be weighed') : (n >= 1000 ? (n / 1000).toLocaleString('it-IT') + ' kg' : n.toLocaleString('it-IT') + ' g');
   const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
   const out = document.getElementById('out');
+
+  const bytes = (b64) => Uint8Array.from(atob(b64), (ch) => ch.charCodeAt(0));
+  const sec = (d) => d ? Math.floor(Date.parse(d) / 1000) : null;
+  const same = (a, b) => (a ?? null) === (b ?? null);
+
+  // Controlla la firma del server: 'ok', 'changed' (dati cambiati dopo la firma), 'bad' (firma falsa),
+  // 'none' (certificato vecchio, senza firma), 'nokey' (chiave non ancora pubblicata), 'unknown' (browser troppo vecchio).
+  async function checkSig(c) {
+    if (!c.seal_sig || !c.signed_payload) return 'none';
+    if (!SEAL_PUBLIC_KEYS.length) return 'nokey';
+    const sig = bytes(c.seal_sig), data = new TextEncoder().encode(c.signed_payload);
+    let ok = false;
+    for (const key of SEAL_PUBLIC_KEYS) {
+      const pub = bytes(key);
+      try {
+        const k = await crypto.subtle.importKey('raw', pub, { name: 'Ed25519' }, false, ['verify']);
+        ok = await crypto.subtle.verify('Ed25519', k, sig, data);
+      } catch (e) {
+        try { // browser senza Ed25519: libreria pubblica, versione fissa
+          const ed = await import('https://cdn.jsdelivr.net/npm/@noble/ed25519@2.1.0/+esm');
+          ok = await ed.verifyAsync(sig, data, pub);
+        } catch (e2) { return 'unknown'; }
+      }
+      if (ok) break;
+    }
+    if (!ok) return 'bad';
+    // La firma è buona: i dati mostrati devono essere proprio quelli firmati.
+    const p = JSON.parse(c.signed_payload);
+    const match = p.code === c.code && p.kind === c.kind && same(p.weight_grams, c.weight_grams) && sec(p.gps_time) === sec(c.gps_time)
+      && same(p.comune, c.comune) && same(p.nickname, c.nickname) && same(p.permit, c.permit) && same(p.dog_name, c.dog_name)
+      && !!p.cancelled_at === !!c.cancelled_at && same(p.device_check, c.device_check);
+    return match && c.sig_current ? 'ok' : 'changed';
+  }
+  const SIG = {
+    ok: T('✅ verificata: dati firmati dal server di Il Cercatore', '✅ verified: data signed by the Il Cercatore server'),
+    changed: T('⚠️ alcuni dati sono cambiati dopo la firma', '⚠️ some data changed after signing'),
+    bad: T('❌ firma NON valida', '❌ signature NOT valid'),
+    none: T('assente (certificato emesso prima della firma digitale)', 'none (certificate issued before digital signing)'),
+    nokey: T('presente (chiave pubblica non ancora pubblicata)', 'present (public key not yet published)'),
+    unknown: T('non controllabile da questo browser', 'cannot be checked by this browser'),
+  };
+  const DEVICE = {
+    verificato: T('✅ originale e non manomesso (Google Play Integrity)', '✅ genuine and not tampered with (Google Play Integrity)'),
+    non_superato: T('⚠️ controllo NON superato (telefono modificato o app non originale)', '⚠️ check NOT passed (modified phone or non-original app)'),
+    non_controllato: T('non controllato (iPhone o app non aggiornata)', 'not checked (iPhone or outdated app)'),
+  };
 
   function parse(text) {
     const m = String(text).toUpperCase().replace(/\s/g, '').match(/([A-Z0-9]{4})-?([A-Z0-9]{4})$/);
@@ -69,6 +119,7 @@
       });
       const c = (await r.json())[0];
       if (!c) { out.innerHTML = '<div class="status bad">❌ ' + T('Codice non trovato: questo certificato non esiste.', 'Code not found: this certificate does not exist.') + '</div>'; return; }
+      const sig = await checkSig(c);
       let w = g(c.weight_grams);
       if (c.weight_fixed_at) w += ' (' + T('corretto il ', 'corrected on ') + fmt(c.weight_fixed_at) + ', ' + T('prima ', 'was ') + g(c.weight_before) + ')';
       else if (c.weighed_at) w += ' (' + T('pesato dopo, il ', 'weighed later, on ') + fmt(c.weighed_at) + ')';
@@ -82,13 +133,17 @@
         [T('Tesserino (dichiarato)', 'Permit (declared)'), c.permit || T('non indicato', 'not given')],
         ...(c.dog_name ? [[T('Cane', 'Dog'), c.dog_name]] : []),
         [T('Registrato sul server', 'Registered on server'), fmt(c.received_at)],
+        [T('Telefono usato', 'Phone used'), DEVICE[c.device_check] || T('non controllato (certificato precedente al controllo)', 'not checked (certificate issued before the check existed)')],
+        [T('Firma digitale del server', 'Server digital signature'), SIG[sig]],
       ];
       out.innerHTML =
-        (!c.seal_ok
+        (!c.seal_ok || sig === 'bad'
           ? '<div class="status bad">⚠️ ' + T('Dati alterati: questo certificato NON è valido', 'Data altered: this certificate is NOT valid') + '</div>'
           : c.cancelled_at
           ? '<div class="status bad">❌ ' + T('Certificato ANNULLATO dal raccoglitore il ', 'Certificate CANCELLED by the harvester on ') + fmt(c.cancelled_at) +
             (c.cancel_reason ? '<br>' + T('Motivo: ', 'Reason: ') + esc(c.cancel_reason) : '') + '</div>'
+          : sig === 'changed'
+          ? '<div class="status wait">⚠️ ' + T('Dati cambiati dopo la firma del server: chiedi conferma al raccoglitore', 'Data changed after the server signed it: ask the harvester to confirm') + '</div>'
           : c.seal_ok
           ? '<div class="status ok">✅ ' + T('Certificato valido', 'Valid certificate') + '</div>'
           : '<div class="status bad">⚠️ ' + T('Dati alterati: questo certificato NON è valido', 'Data altered: this certificate is NOT valid') + '</div>') +
@@ -110,7 +165,7 @@
   if (en) {
     document.getElementById('title').textContent = '✅ Il Cercatore · Certificate check';
     document.getElementById('b').textContent = 'Check';
-    document.getElementById('note').textContent = 'The certificate is registered on the server at harvest time. Position and time come from the phone GPS; the town is computed by the server from the position; the photo is kept on the server and cannot be used for two certificates. Weight and permit are declared by the harvester. For privacy only the town is shown, never the exact spot.';
+    document.getElementById('note').textContent = 'The certificate is registered on the server at harvest time. Position and time come from the phone GPS; the town is computed by the server from the position; the photo is kept on the server and cannot be used for two certificates. Since 3/11/2026 the server also checks that the phone is genuine (Google Play Integrity) and signs every certificate with a secret key: the signature is checked here with the public key. Weight and permit are declared by the harvester. For privacy only the town is shown, never the exact spot.';
   }
   const first = parse(decodeURIComponent(location.hash.slice(1)));
   if (first) { document.getElementById('c').value = first; check(first); }
