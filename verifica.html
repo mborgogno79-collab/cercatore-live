@@ -81,7 +81,7 @@
           (c.comune ? (c.place_source === 'server' ? T(' · calcolata dal server dalla posizione GPS', ' · computed by the server from the GPS position') : T(' (dichiarata)', ' (declared)')) : '')],
         [T('Raccoglitore', 'Harvester'), c.nickname],
         [T('Tesserino (dichiarato)', 'Permit (declared)'), c.permit || T('non indicato', 'not given')],
-        ...(c.dog_name ? [[T('Cane', 'Dog'), c.dog_name]] : []),
+        ...(c.dog_name ? [[T('Cane', 'Dog'), c.dog_name + (c.dog_asl ? ' · ' + T('microchip registrato, iscritto all\'anagrafe canina (dichiarato dal raccoglitore)', 'microchip registered, enrolled in the dog registry (declared by the harvester)') : '')]] : []),
         [T('Registrato sul server', 'Registered on server'), fmt(c.received_at)],
       ];
       out.innerHTML =
