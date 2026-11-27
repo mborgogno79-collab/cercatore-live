@@ -74,10 +74,10 @@
       else if (c.weighed_at) w += ' (' + T('pesato dopo, il ', 'weighed later, on ') + fmt(c.weighed_at) + ')';
       const rows = [
         [T('Prodotto', 'Product'), KINDS[c.kind] || c.kind],
-        ...(c.raggruppato ? [[T('Tipo', 'Type'), '📦 ' + T('Raccolta raggruppata settimanale: più tartufi piccoli insieme (max 100 g), una foto sulla bilancia. Posizione e ora sono quelle della foto, non dei singoli ritrovamenti.', 'Weekly grouped harvest: several small truffles together (max 100 g), one photo on the scale. Location and time are those of the photo, not of each find.')]] : []),
+        ...(c.raggruppato ? [[T('Tipo', 'Type'), '📦 ' + T('Raccolta raggruppata settimanale: più tartufi piccoli insieme (max 100 g), una foto sulla bilancia. Senza posizione: vale sulla fiducia del raccoglitore (nickname e tesserino).', 'Weekly grouped harvest: several small truffles together (max 100 g), one photo on the scale. No location: it relies on the harvester\'s trust (nickname and permit).')]] : []),
         [T('Peso dichiarato', 'Declared weight'), w],
-        [c.raggruppato ? T('Foto sulla bilancia (ora GPS)', 'Photo on the scale (GPS time)') : T('Raccolto il (ora GPS)', 'Harvested on (GPS time)'), fmt(c.gps_time)],
-        [c.raggruppato ? T('Zona della foto', 'Area of the photo') : T('Zona', 'Area'), ([c.comune, c.provincia].filter(Boolean).join(' (') + (c.comune && c.provincia ? ')' : '') || T('non indicata', 'not given')) +
+        [c.raggruppato ? T('Foto sulla bilancia (ora del server)', 'Photo on the scale (server time)') : T('Raccolto il (ora GPS)', 'Harvested on (GPS time)'), fmt(c.gps_time)],
+        [T('Zona', 'Area'), c.raggruppato ? T('nessuna posizione (sulla fiducia)', 'no location (on trust)') : ([c.comune, c.provincia].filter(Boolean).join(' (') + (c.comune && c.provincia ? ')' : '') || T('non indicata', 'not given')) +
           (c.comune ? (c.place_source === 'server' ? T(' · calcolata dal server dalla posizione GPS', ' · computed by the server from the GPS position') : T(' (dichiarata)', ' (declared)')) : '')],
         [T('Raccoglitore', 'Harvester'), c.nickname],
         [T('Tesserino (dichiarato)', 'Permit (declared)'), c.permit || T('non indicato', 'not given')],
