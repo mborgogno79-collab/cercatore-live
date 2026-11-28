@@ -43,6 +43,13 @@
   const KEY = 'sb_publishable_UdbA9AvkFjWJIaLF0Hcn5A_9VpwFhAY';
   const en = !/^it/i.test(navigator.language || 'it');
   const T = (it, eng) => (en ? eng : it);
+  // Tassa regionale del tesserino e imposta per la vendita (F24): dichiarate dal raccoglitore per l'anno della raccolta.
+  const TARTUFI = ['bianco', 'nero', 'scorzone', 'uncinato', 'bianchetto'];
+  const vers = (c) => {
+    const y = new Date(c.gps_time).getFullYear(), yes = T('dichiarato pagato', 'declared paid'), no = T('non dichiarato', 'not declared');
+    return T('Tassa regionale tesserino', 'Regional permit fee') + ' ' + y + ': ' + (c.tcr_ok ? yes : no) + ' · '
+      + T('Imposta vendita tartufi (F24)', 'Truffle sale tax (F24)') + ' ' + y + ': ' + (c.f24_ok ? yes : no);
+  };
   const KINDS = {
     bianco: T('Tartufo bianco', 'White truffle'), nero: T('Tartufo nero pregiato', 'Black winter truffle'),
     scorzone: T('Scorzone (estivo)', 'Summer truffle'), uncinato: T('Nero uncinato', 'Burgundy truffle'),
@@ -82,6 +89,7 @@
         [T('Raccoglitore', 'Harvester'), c.nickname],
         [T('Tesserino (dichiarato)', 'Permit (declared)'), c.permit || T('non indicato', 'not given')],
         ...(c.dog_name ? [[T('Cane', 'Dog'), c.dog_name + (c.dog_asl ? ' · ' + T('microchip registrato, iscritto all\'anagrafe canina (dichiarato dal raccoglitore)', 'microchip registered, enrolled in the dog registry (declared by the harvester)') : '')]] : []),
+        ...(TARTUFI.includes(c.kind) && c.tcr_ok != null ? [[T('Versamenti (dichiarati)', 'Payments (declared)'), vers(c)]] : []),
         [T('Registrato sul server', 'Registered on server'), fmt(c.received_at)],
       ];
       out.innerHTML =
